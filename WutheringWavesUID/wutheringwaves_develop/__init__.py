@@ -5,19 +5,20 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.sv import SV
 
+from ..utils.message import remove_prefix
 from ..wutheringwaves_develop.develop import calc_develop_cost
 
 role_develop = SV("waves角色培养")
 
 
 @role_develop.on_regex(
-    r"(?P<develop_list>([\u4e00-\u9fa5]+)(\s+[\u4e00-\u9fa5]+)*?)\s*(养成|培养|培养成本)",
+    r"(?P<develop_list>([\w\u4e00-\u9fa5]+)(\s+[\w\u4e00-\u9fa5]+)*?)\s*(养成|培养|培养成本)",
     block=True,
 )
 async def calc_develop(bot: Bot, ev: Event):
     match = re.search(
-        r"(?P<develop_list>([\u4e00-\u9fa5]+)(\s+[\u4e00-\u9fa5]+)*?)\s*(养成|培养|培养成本)",
-        ev.raw_text,
+        r"(?P<develop_list>([\w\u4e00-\u9fa5]+)(\s+[\w\u4e00-\u9fa5]+)*?)\s*(养成|培养|培养成本)",
+        remove_prefix(role_develop.plugins, ev.raw_text),
     )
     if not match:
         return
