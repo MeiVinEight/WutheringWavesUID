@@ -6,6 +6,7 @@ from functools import wraps
 from typing import Any, List
 
 import httpx
+from subscribe import gs_subscribe
 
 
 def timed_async_cache(expiration, condition=lambda x: True):
@@ -83,6 +84,10 @@ def generate_random_string(length=32):
     return random_string
 
 
+def generate_random_ipv6_manual():
+    return ":".join([hex(random.randint(0, 0xFFFF))[2:].zfill(4) for _ in range(8)])
+
+
 def hide_uid(uid: str) -> str:
     from ..wutheringwaves_config import WutheringWavesConfig
 
@@ -106,3 +111,20 @@ def get_version():
     from ..version import WutheringWavesUID_version
 
     return WutheringWavesUID_version
+
+
+@timed_async_cache(300)
+async def send_master_info(msg: str):
+    subscribes = await gs_subscribe.get_subscribe("联系主人")
+    if not subscribes:
+        return
+    if subscribes:
+        for sub in subscribes:
+            await sub.send(f"【联系主人】：{msg}")
+
+
+def login_platform() -> str:
+    from ..wutheringwaves_config import WutheringWavesConfig
+
+    LoginType = WutheringWavesConfig.get_config("WavesLoginType").data
+    return LoginType if LoginType else "h5"
