@@ -1,7 +1,8 @@
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
-from sqlalchemy import and_, delete, null, or_
+from sqlalchemy import delete, null, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import and_, or_
 from sqlmodel import Field, col, select
 
 from gsuid_core.utils.database.base_models import (
@@ -18,6 +19,8 @@ exec_list.extend(
         'ALTER TABLE WavesUser ADD COLUMN platform TEXT DEFAULT ""',
         'ALTER TABLE WavesUser ADD COLUMN stamina_bg_value TEXT DEFAULT ""',
         'ALTER TABLE WavesUser ADD COLUMN bbs_sign_switch TEXT DEFAULT "off"',
+        'ALTER TABLE WavesUser ADD COLUMN bat TEXT DEFAULT ""',
+        'ALTER TABLE WavesUser ADD COLUMN did TEXT DEFAULT ""',
     ]
 )
 
@@ -32,7 +35,7 @@ class WavesBind(Bind, table=True):
     @classmethod
     @with_session
     async def get_group_all_uid(
-        cls: Type[T_WavesBind], session: AsyncSession, group_id: str
+        cls: Type[T_WavesBind], session: AsyncSession, group_id: Optional[str] = None
     ):
         """根据传入`group_id`获取该群号下所有绑定`uid`列表"""
         result = await session.scalars(
@@ -51,47 +54,6 @@ class WavesBind(Bind, table=True):
         is_digit: Optional[bool] = True,
         game_name: Optional[str] = None,
     ) -> int:
-        """📝简单介绍:
-
-            基础`Bind`类的扩展方法, 为给定的`user_id`和`bot_id`插入一条uid绑定数据
-
-            可支持多uid的绑定, 如果绑定多个uid, 则数据库中uid列将会用`_`分割符相连接
-
-            可以使用`cls.get_uid_list_by_game()`方法获取相应多绑定uid列表
-
-            或者使用`cls.get_uid_by_game()`方法获得当前绑定uid（单个）
-
-        🌱参数:
-
-            🔹user_id (`str`):
-                    传入的用户id, 例如QQ号, 一般直接取`event.user_id`
-
-            🔹bot_id (`str`):
-                    传入的bot_id, 例如`onebot`, 一般直接取`event.bot_id`
-
-            🔹uid (`str`):
-                    将要插入的uid数据
-
-            🔹group_id (`Optional[str]`, 默认是 `None`):
-                    将要插入的群组数据，为绑定uid提供群组绑定
-
-            🔹lenth_limit (`Optional[int]`, 默认是 `None`):
-                    如果有传该参数, 当uid位数不等于该参数、或uid位数为0的时候, 返回`-1`
-
-            🔹is_digit (`Optional[bool]`, 默认是 `True`):
-                    如果有传该参数, 当uid不为全数字的时候, 返回`-3`
-
-            🔹game_name (`Optional[str]`, 默认是 `None`):
-                    根据该入参寻找相应列名
-
-        🚀使用范例:
-
-            `await GsBind.insert_uid(qid, ev.bot_id, uid, ev.group_id, 9)`
-
-        ✅返回值:
-
-            🔸`int`: 如果该UID已绑定, 则返回`-2`, 成功则为`0`, 合法校验失败为`-3`或`-1`
-        """
         if lenth_limit:
             if len(uid) != lenth_limit:
                 return -1
@@ -109,8 +71,6 @@ class WavesBind(Bind, table=True):
                 bot_id=bot_id,
                 **{"uid": uid, "group_id": group_id},
             )
-            # result = await cls.select_data(user_id, bot_id)
-            # await user_bind_cache.set(user_id, result)
             return code
 
         result = await cls.select_data(user_id, bot_id)
@@ -154,19 +114,58 @@ class WavesUser(User, table=True):
     platform: str = Field(default="", title="ck平台")
     stamina_bg_value: str = Field(default="", title="体力背景")
     bbs_sign_switch: str = Field(default="off", title="自动社区签到")
+    bat: str = Field(default="", title="bat")
+    did: str = Field(default="", title="did")
+
+    @classmethod
+    @with_session
+    async def mark_cookie_invalid(
+        cls: Type[T_WavesUser], session: AsyncSession, uid: str, cookie: str, mark: str
+    ):
+        sql = (
+            update(cls)
+            .where(col(cls.uid) == uid)
+            .where(col(cls.cookie) == cookie)
+            .values(status=mark)
+        )
+        await session.execute(sql)
+        return True
 
     @classmethod
     @with_session
     async def select_cookie(
         cls: Type[T_WavesUser],
         session: AsyncSession,
-        user_id: str,
         uid: str,
+        user_id: str,
+        bot_id: str,
     ) -> Optional[str]:
-        sql = select(cls).where(cls.user_id == user_id, cls.uid == uid)
+        sql = select(cls).where(
+            cls.user_id == user_id,
+            cls.uid == uid,
+            cls.bot_id == bot_id,
+        )
         result = await session.execute(sql)
         data = result.scalars().all()
         return data[0].cookie if data else None
+
+    @classmethod
+    @with_session
+    async def select_waves_user(
+        cls: Type[T_WavesUser],
+        session: AsyncSession,
+        uid: str,
+        user_id: str,
+        bot_id: str,
+    ) -> Optional[T_WavesUser]:
+        sql = select(cls).where(
+            cls.user_id == user_id,
+            cls.uid == uid,
+            cls.bot_id == bot_id,
+        )
+        result = await session.execute(sql)
+        data = result.scalars().all()
+        return data[0] if data else None
 
     @classmethod
     @with_session
@@ -177,10 +176,10 @@ class WavesUser(User, table=True):
     ) -> List[str]:
         sql = select(cls).where(
             and_(
-                cls.user_id == user_id,
-                cls.cookie != null(),
-                cls.cookie != "",
-                or_(cls.status == null(), cls.status == ""),
+                col(cls.user_id) == user_id,
+                col(cls.cookie) != null(),
+                col(cls.cookie) != "",
+                or_(col(cls.status) == null(), col(cls.status) == ""),
             )
         )
         result = await session.execute(sql)
@@ -193,6 +192,16 @@ class WavesUser(User, table=True):
         cls: Type[T_WavesUser], session: AsyncSession, cookie: str
     ) -> Optional[T_WavesUser]:
         sql = select(cls).where(cls.cookie == cookie)
+        result = await session.execute(sql)
+        data = result.scalars().all()
+        return data[0] if data else None
+
+    @classmethod
+    @with_session
+    async def select_data_by_cookie_and_uid(
+        cls: Type[T_WavesUser], session: AsyncSession, cookie: str, uid: str
+    ) -> Optional[T_WavesUser]:
+        sql = select(cls).where(cls.cookie == cookie, cls.uid == uid)
         result = await session.execute(sql)
         data = result.scalars().all()
         return data[0] if data else None
@@ -218,56 +227,47 @@ class WavesUser(User, table=True):
     async def get_waves_all_user(
         cls: Type[T_WavesUser], session: AsyncSession
     ) -> List[T_WavesUser]:
+        """获取所有有效用户"""
         sql = select(cls).where(
             and_(
-                or_(cls.status == null(), cls.status == ""),
-                cls.cookie != null(),
-                cls.cookie != "",
+                or_(col(cls.status) == null(), col(cls.status) == ""),
+                col(cls.cookie) != null(),
+                col(cls.cookie) != "",
             )
         )
+
         result = await session.execute(sql)
         data = result.scalars().all()
-        return data
-
-    @classmethod
-    @with_session
-    async def get_waves_all_user2(
-        cls: Type[T_WavesUser], session: AsyncSession
-    ) -> List[T_WavesUser]:
-        """
-        获取有token的玩家。
-        """
-        sql = select(cls).where(
-            and_(
-                cls.cookie != null(),
-                cls.cookie != "",
-                cls.user_id != null(),
-                cls.user_id != "",
-            )
-        )
-        result = await session.execute(sql)
-        data = result.scalars().all()
-        return data
-
-    @classmethod
-    async def get_all_push_user_list(cls: Type[T_WavesUser]) -> List[T_WavesUser]:
-        data = await cls.get_waves_all_user()
-        return [user for user in data if user.push_switch != "off"]
+        return list(data)
 
     @classmethod
     @with_session
     async def delete_all_invalid_cookie(cls, session: AsyncSession):
         """删除所有无效缓存"""
-        # 先查数量
-        sql = select(cls).where(and_(or_(cls.status == "无效", cls.cookie == "")))
+        sql = delete(cls).where(
+            or_(col(cls.status) == "无效", col(cls.cookie) == ""),
+        )
         result = await session.execute(sql)
-        query = result.scalars().all()
-        if len(query) == 0:
-            return 0
+        return result.rowcount
 
-        sql = delete(cls).where(and_(or_(cls.status == "无效", cls.cookie == "")))
-        await session.execute(sql)
-        return len(query)
+    @classmethod
+    @with_session
+    async def delete_cookie(
+        cls,
+        session: AsyncSession,
+        uid: str,
+        user_id: str,
+        bot_id: str,
+    ):
+        sql = delete(cls).where(
+            and_(
+                col(cls.user_id) == user_id,
+                col(cls.uid) == uid,
+                col(cls.bot_id) == bot_id,
+            )
+        )
+        result = await session.execute(sql)
+        return result.rowcount
 
 
 class WavesPush(Push, table=True):

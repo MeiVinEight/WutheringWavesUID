@@ -57,8 +57,10 @@ async def new_draw_char_hold_rate(ev: Event, data, group_id: str = "") -> bytes:
         filter_type = "五"
     elif "up" in text or "UP" in text:
         filter_type = "UP"
-    else:
+    elif "all" in text or "ALL" in text or "全" in text:
         filter_type = ""
+    else:
+        filter_type = "五"  # 默认显示五星角色
 
     # 加载数据
     char_list = data["char_hold_rate"]
@@ -124,9 +126,14 @@ async def new_draw_char_hold_rate(ev: Event, data, group_id: str = "") -> bytes:
     title_mask_draw.text((300, 430), title_text, "white", waves_font_58, "lm")
 
     # count
+    title = (
+        f"样本数量: {data.get('total_player_count', 0)} 人"
+        if group_id
+        else "近期活跃角色持有率"
+    )
     title_mask_draw.text(
         (300, 500),
-        f"样本数量: {data.get('total_player_count', 0)} 人",
+        title,
         "white",
         waves_font_36,
         "lm",
@@ -198,8 +205,12 @@ async def new_draw_char_hold_rate(ev: Event, data, group_id: str = "") -> bytes:
         hole_progress_bg_draw.rounded_rectangle(
             (0, 0, real_length, 24), 15, fill=color + (170,)
         )
+        if hold_rate < 10:
+            xy = (real_length + 50, 12)
+        else:
+            xy = (real_length - 50, 12)
         hole_progress_bg_draw.text(
-            (real_length - 50, 12),
+            xy,
             hold_rate_text,
             "white",
             waves_font_20,

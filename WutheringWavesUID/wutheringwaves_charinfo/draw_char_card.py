@@ -248,7 +248,6 @@ async def ph_card_draw(
                 phantom_icon = await get_phantom_img(
                     _phantom.phantomProp.phantomId, _phantom.phantomProp.iconUrl
                 )
-                # fetter_icon = await get_fetter_img(_phantom.fetterDetail.name, _phantom.fetterDetail.iconUrl)
                 fetter_icon = await get_attribute_effect(_phantom.fetterDetail.name)
                 fetter_icon = fetter_icon.resize((50, 50))
                 phantom_icon.alpha_composite(fetter_icon, dest=(205, 0))
@@ -276,18 +275,16 @@ async def ph_card_draw(
                 sh_temp.alpha_composite(ph_level_img, (128, 58))
 
                 # 声骸分数背景
-                ph_score_img = Image.new("RGBA", (92, 30), (255, 255, 255, 0))
+                ph_score_img = Image.new("RGBA", (100, 30), (255, 255, 255, 0))
                 ph_score_img_draw = ImageDraw.Draw(ph_score_img)
                 ph_score_img_draw.rounded_rectangle(
-                    [0, 0, 92, 30], radius=8, fill=(186, 55, 42, int(0.8 * 255))
+                    [0, 0, 100, 30], radius=8, fill=(186, 55, 42, int(0.8 * 255))
                 )
                 ph_score_img_draw.text(
-                    (5, 13), f"{_score}分", "white", waves_font_24, "lm"
+                    (50, 13), f"{_score}分", "white", waves_font_24, "mm"
                 )
-                sh_temp.alpha_composite(ph_score_img, (228, 58))
+                sh_temp.alpha_composite(ph_score_img, (223, 58))
 
-                # sh_temp_draw.text((142, 70), f'Lv.{_phantom.level}', 'white', waves_font_24, 'lm')
-                # sh_temp_draw.text((242, 70), f'{_score}分', 'white', waves_font_24, 'lm')
                 for index in range(0, _phantom.cost):
                     promote_icon = Image.open(TEXT_PATH / "promote_icon.png")
                     promote_icon = promote_icon.resize((30, 30))
@@ -409,6 +406,7 @@ async def get_role_need(
     force_resource_id=None,
     is_online_user=True,
     is_limit_query=False,
+    change_list_regex: Optional[str] = None,
 ):
     if waves_id:
         query_list = [char_id]
@@ -461,7 +459,7 @@ async def get_role_need(
                     None,
                     f"[鸣潮] 未找到【{char_name}】角色极限面板信息，请等待适配!\n",
                 )
-            elif is_online_user:
+            elif is_online_user and not change_list_regex:
                 return (
                     None,
                     f"[鸣潮] 未找到【{char_name}】角色信息, 请先使用[{PREFIX}刷新面板]进行刷新!\n",
@@ -627,7 +625,7 @@ async def draw_char_detail_img(
     jineng_len = 180
     dd_len = 0
     isDraw = False if damageId and damageDetail else True
-    echo_list = 1400 if isDraw else 140
+    echo_list = 1400 if isDraw else 170
     if damageDetail and isDraw:
         dd_len = 60 + (len(damageDetail) + 1) * 60
 
@@ -646,7 +644,7 @@ async def draw_char_detail_img(
     is_online_user = False
     ck = ""
     if not is_limit_query:
-        _, ck = await waves_api.get_ck_result(uid, user_id)
+        _, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id)
         if not ck:
             return hint.error_reply(WAVES_CODE_102)
 
@@ -690,6 +688,7 @@ async def draw_char_detail_img(
         force_resource_id,
         is_online_user,
         is_limit_query,
+        change_list_regex,
     )
     if isinstance(role_detail, str):
         return role_detail
@@ -792,10 +791,6 @@ async def draw_char_detail_img(
             )
 
         dd_len += damage_calc_img.size[1]
-        # new_img = await get_card_bg(1200, img.size[1] + damage_calc_img.size[1], "bg3")
-        # new_img.paste(img, (0, 0), img)
-        # new_img.alpha_composite(damage_calc_img, (0, img.size[1]))
-        # img = new_img
 
     # 创建背景
     img = await get_card_bg(
@@ -809,7 +804,7 @@ async def draw_char_detail_img(
 
     if damage_calc_img:
         img.alpha_composite(
-            damage_calc_img, (0, img.size[1] - 50 - damage_calc_img.size[1])
+            damage_calc_img, (0, img.size[1] - 10 - damage_calc_img.size[1])
         )
 
     # 右侧属性
@@ -1089,7 +1084,7 @@ async def draw_char_score_img(
             f"[鸣潮] 角色名【{char}】无法找到, 可能暂未适配, 请先检查输入是否正确！\n"
         )
     char_name = alias_to_char_name(char)
-    _, ck = await waves_api.get_ck_result(uid, user_id)
+    _, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id)
     if not ck:
         return hint.error_reply(WAVES_CODE_102)
 
